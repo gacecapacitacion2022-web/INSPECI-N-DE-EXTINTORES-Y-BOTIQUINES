@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SISTEMA DE INSPECCIÓN SEGURIDAD</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        :root { --p-blue: #007bff; --bg: #f1f5f9; --text: #1e293b; --border: #cbd5e1; --success: #22c55e; --danger: #ef4444; --warning: #f1c40f; }
+        body { font-family: 'Public Sans', sans-serif; background: var(--bg); margin: 0; color: var(--text); }
+        .header-nav { background: white; padding: 15px 0; box-shadow: 0 2px 10px rgba(0,0,0,0.1); text-align: center; position: sticky; top: 0; z-index: 100; }
+        .nav-tabs { display: flex; justify-content: center; gap: 10px; margin-top: 10px; padding: 0 5px; }
+        .tab-btn { padding: 12px 15px; border: none; background: #f8fafc; border-radius: 12px; font-weight: 700; color: #475569; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .tab-btn.active { background: var(--p-blue); color: white; }
+        .container { max-width: 850px; margin: 15px auto; background: white; border-radius: 20px; padding: 25px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        input, select, textarea { width: 100%; padding: 12px; border: 1.5px solid var(--border); border-radius: 10px; box-sizing: border-box; font-size: 14px; outline: none; }
+        .btn { padding: 12px; border-radius: 12px; border: none; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; transition: 0.2s; }
+        .btn-main { background: var(--p-blue); color: white; width: 100%; }
+        .btn-pdf { background: var(--success); color: white; width: 100%; margin-top: 20px; font-size: 16px; }
+        .cat-card { width: 130px; padding: 20px; border: 2.5px solid var(--border); border-radius: 20px; text-align: center; cursor: pointer; background: white; }
+        .cat-card i { font-size: 2rem; margin-bottom: 8px; }
+        .cat-card.selected-ext { border-color: #ff4757; color: #ff4757; background: #fff5f6; transform: scale(1.05); }
+        .cat-card.selected-bot { border-color: #2ed573; color: #2ed573; background: #f1fdf5; transform: scale(1.05); }
+        .ext-selector-box { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; margin-top: 20px; }
+        .ext-card { padding: 15px; background: white; border: 2.5px solid var(--border); border-radius: 15px; cursor: pointer; text-align: center; }
+        .ext-card.inspected { background: #f0fdf4; border-color: var(--success); color: #166534; }
+        .info-box { background: #f1f5f9; border: 1px solid var(--border); border-radius: 12px; padding: 15px; margin-bottom: 15px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; font-size: 13px; }
+        .quick-add-box { background: #f8fafc; border: 2px dashed #cbd5e1; padding: 20px; border-radius: 20px; margin-bottom: 25px; }
+        .canvas-style { border: 2px dashed #b0bec5; background: #fff; width: 100%; max-width: 500px; height: 150px; border-radius: 12px; touch-action: none; }
+        .hidden { display: none; }
+        .btn-icon { padding: 8px; border-radius: 8px; color: white; font-size: 12px; border: none; cursor: pointer; margin: 0 2px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th { text-align: left; padding: 12px; border-bottom: 2px solid #e2e8f0; font-size: 13px; }
+        td { padding: 12px; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
+        .loading-cloud { font-size: 11px; color: var(--p-blue); font-weight: bold; margin-left: 10px; display: none; }
+    </style>
+</head>
+<body>
+
+<div class="header-nav">
+    <b style="color: var(--p-blue); font-size: 1.4rem;"><i class="fa-solid fa-shield-halved" style="color: #ffa502;"></i> INSPECIÓN DE EXTINTORES Y BOTIQUINES</b>
+    <span id="cloud-status" class="loading-cloud"><i class="fa-solid fa-cloud-arrow-up"></i> Sincronizando...</span>
+    <div class="nav-tabs">
+        <button class="tab-btn active" id="t1" onclick="switchTab('tab-registro', 't1')"><i class="fa-solid fa-clipboard-check" style="color: #2ed573;"></i> REGISTRO</button>
+        <button class="tab-btn" id="t2" onclick="switchTab('tab-equipos', 't2')"><i class="fa-solid fa-toolbox" style="color: #1e90ff;"></i> EQUIPOS</button>
+        <button class="tab-btn" id="t3" onclick="switchTab('tab-empresas', 't3')"><i class="fa-solid fa-industry" style="color: #ff4757;"></i> EMPRESAS</button>
+    </div>
+</div>
+
+<div class="container">
+    <div id="tab-registro">
+        <div class="form-grid">
+            <div><label><b>Instructor</b></label><input type="text" id="ins-nombre" placeholder="Nombre completo"></div>
+            <div><label><b>Fecha</b></label><input type="date" id="ins-fecha"></div>
+            <div><label><b>Planta</b></label><select id="sel-emp-reg" onchange="initRegistro()"></select></div>
+        </div>
+
+        <div id="registro-content" class="hidden">
+            <div class="quick-add-box">
+                <p style="margin:0 0 15px 0; font-size: 13px; color: #1e90ff; font-weight: bold;"><i class="fa-solid fa-circle-plus"></i> REGISTRAR EQUIPO EN ESTA PLANTA</p>
+                <div class="form-grid" style="grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));">
+                    <input type="hidden" id="edit-eq-idx-reg" value="">
+                    <select id="q-cat" onchange="toggleQFields()">
+                        <option value="extintor">Extintor</option>
+                        <option value="botiquin">Botiquín</option>
+                    </select>
+                    <input type="text" id="q-num" placeholder="No. Eco">
+                    <input type="text" id="q-area" placeholder="Ubicación">
+                    <div id="q-ext-only" style="display: contents;">
+                        <div style="position: relative;">
+                            <select id="q-tipo" onchange="checkOtherAgent(this)">
+                                <option>PQS</option>
+                                <option>CO2</option>
+                                <option>Agua</option>
+                                <option>Acetato de Potasio</option>
+                                <option>Cloruro de Sodio</option>
+                                <option value="OTRO">Otro (Escribir...)</option>
+                            </select>
+                            <input type="text" id="q-tipo-otro" class="hidden" placeholder="¿Cuál?" style="margin-top:5px;">
+                        </div>
+                        <input type="text" id="q-peso" placeholder="Peso (kg)">
+                    </div>
+                    <button class="btn btn-main" id="btn-save-eq" onclick="quickSaveEquipo()">Guardar</button>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 20px; justify-content: center; margin: 25px 0;">
+                <div class="cat-card" id="card-cat-ext" onclick="setCategory('extintor')"><i class="fa-solid fa-fire-extinguisher" style="color: #ff4757;"></i><br><b>Extintores</b></div>
+                <div class="cat-card" id="card-cat-bot" onclick="setCategory('botiquin')"><i class="fa-solid fa-kit-medical" style="color: #2ed573;"></i><br><b>Botiquines</b></div>
+            </div>
+            
+            <div id="selector-container" class="ext-selector-box"></div>
+            
+            <div id="inspeccion-form" class="hidden" style="background: #fff; border: 2px solid var(--p-blue); padding: 20px; border-radius: 20px; margin-top: 20px;">
+                <h3 id="inspecting-title" style="color: var(--p-blue); margin: 0 0 10px 0;"></h3>
+                <div id="ext-info-display" class="info-box"></div>
+                <div id="lista-aspectos"></div>
+                <div style="margin-top:15px;"><label><b>Observaciones:</b></label><textarea id="ins-obs" rows="2"></textarea></div>
+                <div style="margin-top:15px;">
+                    <label><b>Fotos de Evidencia:</b></label>
+                    <div id="fotos-dinamicas" style="display:flex; flex-direction:column; gap:8px;">
+                        <input type="file" class="ext-foto-input" accept="image/*" capture="environment" onchange="handleMultiplePhotos(this)">
+                    </div>
+                </div>
+                <button class="btn btn-main" style="margin-top:20px;" onclick="saveCurrentStatus()">Finalizar Inspección</button>
+            </div>
+
+            <div style="margin-top:35px; border-top: 1px solid #eee; padding-top: 20px;">
+                <label><b>Firma del Responsable:</b></label><br>
+                <canvas id="canvas-firma" class="canvas-style"></canvas><br>
+                <button class="btn" style="background:#f1f2f6; margin-top:10px; font-size:12px;" onclick="limpiarFirma()">Borrar Firma</button>
+            </div>
+            <button class="btn btn-pdf" onclick="generatePDF()"><i class="fa-solid fa-file-pdf"></i> GENERAR REPORTE PDF</button>
+        </div>
+    </div>
+
+    <div id="tab-equipos" class="hidden">
+        <h3>Equipos Registrados</h3>
+        <select id="filter-emp-equipos" onchange="renderEquiposTable()"></select>
+        <table id="table-ext">
+            <thead><tr><th>Tipo</th><th>No.</th><th>Área</th><th>Acciones</th></tr></thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <div id="tab-empresas" class="hidden">
+        <div class="form-grid">
+            <input type="hidden" id="edit-emp-idx" value="">
+            <input type="text" id="emp-nom" placeholder="Nombre Comercial">
+            <input type="text" id="emp-raz" placeholder="Razón Social">
+        </div>
+        <button class="btn btn-main" onclick="saveEmpresa()">Guardar Empresa</button>
+        <table id="table-emp">
+            <thead><tr><th>Empresa</th><th>Razón Social</th><th>Acciones</th></tr></thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    // --- CONFIGURACIÓN NUBE ---
+    const URL_SCRIPT = "https://script.google.com/macros/s/AKfycbzCuposaPKzKukN9R0WN0HYHZIcUPGqSz3M6Zu1Mq43K0GmRPWHwrrNBlwjdAl2gLdTog/exec";
+
+    let empresas = JSON.parse(localStorage.getItem('gace_ems')) || [];
+    let equipos = JSON.parse(localStorage.getItem('gace_eqs')) || [];
+    let revisiones = {}; let fotosEvidencia = {}; let obsRevision = {};
+    let currentExtIdx = null; let currentCat = 'extintor';
+
+    const aspExt = ["Presión/manómetro", "Cincho de seguridad", "Argolla de seguridad", "Señalamiento visible", "Instructivo de uso", "Manguera en buen estado", "Boquilla libre", "Manija de agarre", "Manija de activación", "Soporte en buen estado", "Ausencia de golpes", "Libre de obstrucción"];
+    const aspBot = ["Gasas estériles", "Vendas elásticas", "Cinta adhesiva", "Curitas", "Algodón", "Alcohol 70%", "Solución salina", "Guantes desechables", "Tijeras botón", "Termómetro", "Ausencia medicamentos", "Libre obstrucción", "Señalamiento visible"];
+
+    function init() {
+        renderSelectors(); renderEmpresasTable(); renderEquiposTable();
+        document.getElementById('ins-fecha').valueAsDate = new Date();
+        setupCanvas('canvas-firma');
+        cargarDatosNube(); // Al iniciar, sincronizamos desde la nube
+    }
+
+    // --- FUNCIONES DE COMUNICACIÓN ---
+    async function sincronizarNube() {
+        const status = document.getElementById('cloud-status');
+        status.style.display = 'inline';
+        try {
+            await fetch(URL_SCRIPT, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'syncAll',
+                    empresas: empresas,
+                    equipos: equipos
+                })
+            });
+            console.log("Sincronización enviada con éxito.");
+        } catch (e) {
+            console.error("Error al sincronizar:", e);
+        } finally {
+            setTimeout(() => { status.style.display = 'none'; }, 2000);
+        }
+    }
+
+    async function cargarDatosNube() {
+        try {
+            const res = await fetch(URL_SCRIPT);
+            const data = await res.json();
+            if (data.empresas && data.empresas.length > 0) {
+                empresas = data.empresas;
+                equipos = data.equipos;
+                localStorage.setItem('gace_ems', JSON.stringify(empresas));
+                localStorage.setItem('gace_eqs', JSON.stringify(equipos));
+                renderSelectors(); renderEmpresasTable(); renderEquiposTable();
+                console.log("Datos cargados desde la nube.");
+            }
+        } catch (e) {
+            console.log("Iniciando con datos locales (sin conexión a nube).");
+        }
+    }
+
+    function renderSelectors() {
+        const s1 = document.getElementById('sel-emp-reg'), s2 = document.getElementById('filter-emp-equipos');
+        const opt = '<option value="">-- Elija Planta --</option>' + empresas.map((e, i) => `<option value="${i}">${e.nombre}</option>`).join('');
+        s1.innerHTML = opt;
+        s2.innerHTML = '<option value="all">Ver todas</option>' + empresas.map((e, i) => `<option value="${i}">${e.nombre}</option>`).join('');
+    }
+
+    function switchTab(t, b) {
+        document.querySelectorAll('.tab-btn').forEach(x => x.classList.remove('active'));
+        document.getElementById(b).classList.add('active');
+        document.querySelectorAll('.container > div').forEach(x => x.classList.add('hidden'));
+        document.getElementById(t).classList.remove('hidden');
+    }
+
+    function initRegistro() {
+        const val = document.getElementById('sel-emp-reg').value;
+        document.getElementById('registro-content').classList.toggle('hidden', val === "");
+        if(val !== "") setCategory(currentCat);
+    }
+
+    function toggleQFields() {
+        const isExt = document.getElementById('q-cat').value === 'extintor';
+        document.getElementById('q-ext-only').style.display = isExt ? 'contents' : 'none';
+    }
+
+    function checkOtherAgent(sel) {
+        document.getElementById('q-tipo-otro').classList.toggle('hidden', sel.value !== 'OTRO');
+    }
+
+    function quickSaveEquipo() {
+        const empIdx = document.getElementById('sel-emp-reg').value;
+        const cat = document.getElementById('q-cat').value;
+        const editIdx = document.getElementById('edit-eq-idx-reg').value;
+        
+        let agente = document.getElementById('q-tipo').value;
+        if(agente === 'OTRO') agente = document.getElementById('q-tipo-otro').value;
+
+        const eq = { 
+            cat: cat, owner: empIdx, 
+            num: document.getElementById('q-num').value, area: document.getElementById('q-area').value, 
+            tipo: cat === 'extintor' ? agente : "N/A", 
+            peso: cat === 'extintor' ? document.getElementById('q-peso').value : "N/A"
+        };
+
+        if(!eq.num || !eq.area) return alert("Faltan datos");
+
+        if(editIdx === "") equipos.push(eq);
+        else { equipos[editIdx] = eq; document.getElementById('edit-eq-idx-reg').value = ""; }
+
+        localStorage.setItem('gace_eqs', JSON.stringify(equipos));
+        ['q-num', 'q-area', 'q-peso', 'q-tipo-otro'].forEach(id => document.getElementById(id).value = "");
+        document.getElementById('q-tipo-otro').classList.add('hidden');
+        loadEquiposForReg(); renderEquiposTable();
+        sincronizarNube(); // <--- SINCRONIZAR
+    }
+
+    function setCategory(cat) {
+        currentCat = cat;
+        document.getElementById('card-cat-ext').className = 'cat-card' + (cat === 'extintor' ? ' selected-ext' : '');
+        document.getElementById('card-cat-bot').className = 'cat-card' + (cat === 'botiquin' ? ' selected-bot' : '');
+        loadEquiposForReg();
+    }
+
+    function loadEquiposForReg() {
+        const emp = document.getElementById('sel-emp-reg').value;
+        const cont = document.getElementById('selector-container');
+        document.getElementById('inspeccion-form').classList.add('hidden');
+        cont.innerHTML = equipos.map((eq, i) => (eq.owner == emp && eq.cat == currentCat) ? 
+            `<div class="ext-card ${revisiones[i] ? 'inspected' : ''}" id="card-${i}" onclick="openInspeccion(${i})"><b>#${eq.num}</b><br><small>${eq.area}</small></div>` : "").join('');
+    }
+
+    function openInspeccion(idx) {
+        currentExtIdx = idx; const eq = equipos[idx];
+        const asps = eq.cat === 'extintor' ? aspExt : aspBot;
+        document.getElementById('inspeccion-form').classList.remove('hidden');
+        document.getElementById('inspecting-title').innerText = `Revisando #${eq.num}`;
+        
+        document.getElementById('ext-info-display').innerHTML = `
+            <div><b>Área:</b> ${eq.area}</div><div><b>No. Eco:</b> ${eq.num}</div>
+            ${eq.cat === 'extintor' ? `<div><b>Agente:</b> ${eq.tipo}</div><div><b>Peso:</b> ${eq.peso} kg</div>` : ''}
+        `;
+
+        const prev = revisiones[idx] || Array(asps.length).fill("");
+        document.getElementById('lista-aspectos').innerHTML = asps.map((a, j) => `
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:8px; border-bottom:1px solid #eee;">
+                <span style="font-size:12px;">${a}</span>
+                <select id="asp-${j}" style="width:110px; padding:5px;">
+                    <option value="" ${prev[j]==''?'selected':''}>--</option>
+                    <option ${prev[j]=='Cumple'?'selected':''}>Cumple</option>
+                    <option ${prev[j]=='No cumple'?'selected':''}>No cumple</option>
+                    <option ${prev[j]=='N/A'?'selected':''}>N/A</option>
+                </select>
+            </div>`).join('');
+        document.getElementById('ins-obs').value = obsRevision[idx] || "";
+        document.getElementById('fotos-dinamicas').innerHTML = '<input type="file" class="ext-foto-input" accept="image/*" capture="environment" onchange="handleMultiplePhotos(this)">';
+    }
+
+    async function saveCurrentStatus() {
+        const asps = equipos[currentExtIdx].cat === 'extintor' ? aspExt : aspBot;
+        revisiones[currentExtIdx] = asps.map((_, j) => document.getElementById('asp-' + j).value);
+        obsRevision[currentExtIdx] = document.getElementById('ins-obs').value;
+        const inputs = document.querySelectorAll('.ext-foto-input');
+        const promesas = [];
+        inputs.forEach(input => { if(input.files[0]) { promesas.push(new Promise(res => { const r = new FileReader(); r.onload = e => res(e.target.result); r.readAsDataURL(input.files[0]); })); } });
+        fotosEvidencia[currentExtIdx] = await Promise.all(promesas);
+        document.getElementById('card-' + currentExtIdx).classList.add('inspected');
+        document.getElementById('inspeccion-form').classList.add('hidden');
+    }
+
+    function handleMultiplePhotos(input) {
+        if (input.files && input.files[0]) {
+            const container = document.getElementById('fotos-dinamicas');
+            const nuevoInput = document.createElement('input');
+            nuevoInput.type = 'file'; nuevoInput.className = 'ext-foto-input'; nuevoInput.accept = 'image/*';
+            nuevoInput.setAttribute('capture', 'environment');
+            nuevoInput.onchange = function() { handleMultiplePhotos(this); };
+            container.appendChild(nuevoInput);
+        }
+    }
+
+    function saveEmpresa() {
+        const n = document.getElementById('emp-nom').value, r = document.getElementById('emp-raz').value, idx = document.getElementById('edit-emp-idx').value;
+        if(!n || !r) return alert("Faltan datos");
+        if(idx === "") empresas.push({nombre:n, razon:r}); else empresas[idx] = {nombre:n, razon:r};
+        localStorage.setItem('gace_ems', JSON.stringify(empresas));
+        document.getElementById('emp-nom').value = ""; document.getElementById('emp-raz').value = ""; document.getElementById('edit-emp-idx').value = "";
+        renderSelectors(); renderEmpresasTable();
+        sincronizarNube(); // <--- SINCRONIZAR
+    }
+
+    function renderEmpresasTable() {
+        document.querySelector('#table-emp tbody').innerHTML = empresas.map((e, i) => `<tr><td>${e.nombre}</td><td>${e.razon}</td><td><button onclick="editEmp(${i})" class="btn-icon" style="background:var(--p-blue)"><i class="fa-solid fa-pen"></i></button><button onclick="deleteEmp(${i})" class="btn-icon" style="background:var(--danger)"><i class="fa-solid fa-trash"></i></button></td></tr>`).join('');
+    }
+
+    function editEmp(i) { 
+        if(confirm("¿Estás seguro de que deseas editar los datos de esta empresa?")) {
+            document.getElementById('emp-nom').value = empresas[i].nombre; 
+            document.getElementById('emp-raz').value = empresas[i].razon; 
+            document.getElementById('edit-emp-idx').value = i; 
+        }
+    }
+
+    function deleteEmp(i) { 
+        if(confirm("¿Estás totalmente seguro de eliminar esta Planta? Esta acción es irreversible y borrará todos sus equipos automáticamente.")) { 
+            // Filtrar equipos de la empresa eliminada
+            equipos = equipos.filter(eq => eq.owner != i);
+            // Ajustar el owner de los equipos restantes si el índice cambió
+            equipos.forEach(eq => { if(eq.owner > i) eq.owner--; });
+            
+            empresas.splice(i, 1); 
+            localStorage.setItem('gace_ems', JSON.stringify(empresas)); 
+            localStorage.setItem('gace_eqs', JSON.stringify(equipos));
+            renderSelectors(); renderEmpresasTable(); renderEquiposTable();
+            sincronizarNube(); // <--- SINCRONIZAR
+        } 
+    }
+
+    function renderEquiposTable() {
+        const f = document.getElementById('filter-emp-equipos').value;
+        document.querySelector('#table-ext tbody').innerHTML = equipos.map((eq, i) => (f === "all" || eq.owner == f) ? `<tr><td>${eq.cat}</td><td>${eq.num}</td><td>${eq.area}</td><td><button onclick="editEq(${i})" class="btn-icon" style="background:var(--p-blue)"><i class="fa-solid fa-pen"></i></button><button onclick="deleteExt(${i})" class="btn-icon" style="background:var(--danger)"><i class="fa-solid fa-trash"></i></button></td></tr>` : "").join('');
+    }
+
+    function editEq(i) {
+        if(confirm("¿Deseas editar la información de este equipo?")) {
+            switchTab('tab-registro', 't1');
+            const eq = equipos[i];
+            document.getElementById('sel-emp-reg').value = eq.owner;
+            initRegistro();
+            document.getElementById('edit-eq-idx-reg').value = i;
+            document.getElementById('q-cat').value = eq.cat;
+            toggleQFields();
+            document.getElementById('q-num').value = eq.num;
+            document.getElementById('q-area').value = eq.area;
+            if(eq.cat === 'extintor') {
+                document.getElementById('q-tipo').value = eq.tipo;
+                document.getElementById('q-peso').value = eq.peso;
+            }
+        }
+    }
+
+    function deleteExt(i) { 
+        if(confirm("¿Seguro que deseas eliminar este equipo?")) { 
+            equipos.splice(i, 1); 
+            localStorage.setItem('gace_eqs', JSON.stringify(equipos)); 
+            renderEquiposTable(); 
+            sincronizarNube(); // <--- SINCRONIZAR
+        } 
+    }
+
+    function setupCanvas(id) {
+        const cv = document.getElementById(id); const cx = cv.getContext('2d'); cv.width = 500; cv.height = 150;
+        let dib = false; const pos = (e) => { const r = cv.getBoundingClientRect(); const x = e.touches ? e.touches[0].clientX : e.clientX, y = e.touches ? e.touches[0].clientY : e.clientY; return { x: (x - r.left) * (500 / r.width), y: (y - r.top) * (150 / r.height) }; };
+        const start = (e) => { e.preventDefault(); dib = true; cx.beginPath(); const p = pos(e); cx.moveTo(p.x, p.y); };
+        const move = (e) => { if(!dib) return; e.preventDefault(); const p = pos(e); cx.lineTo(p.x, p.y); cx.stroke(); };
+        cv.addEventListener('mousedown', start); cv.addEventListener('mousemove', move); window.addEventListener('mouseup', () => dib = false);
+        cv.addEventListener('touchstart', start, {passive:false}); cv.addEventListener('touchmove', move, {passive:false});
+        cx.lineWidth = 2; cx.lineCap = 'round';
+    }
+
+    function limpiarFirma() { document.getElementById('canvas-firma').getContext('2d').clearRect(0,0,500,150); }
+
+    function agregarPiePagina(doc, firma) {
+        const pageHeight = doc.internal.pageSize.height;
+        const pageWidth = doc.internal.pageSize.width;
+        doc.setDrawColor(0, 0, 0);
+        doc.setLineWidth(0.5);
+        doc.line(pageWidth/2 - 30, pageHeight - 25, pageWidth/2 + 30, pageHeight - 25);
+        doc.addImage(firma, 'PNG', pageWidth/2 - 20, pageHeight - 42, 40, 15);
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "bold");
+        doc.text("Firma del inspector", pageWidth/2, pageHeight - 20, {align: 'center'});
+    }
+
+    async function generatePDF() {
+        const { jsPDF } = window.jspdf; const doc = new jsPDF('p', 'mm', 'a4');
+        const empIdx = document.getElementById('sel-emp-reg').value;
+        const inspector = document.getElementById('ins-nombre').value;
+        const fechaRaw = document.getElementById('ins-fecha').value;
+        const firma = document.getElementById('canvas-firma').toDataURL();
+        if(!empIdx || !inspector) return alert("Faltan datos");
+
+        const empData = empresas[empIdx];
+        const misEqs = equipos
+            .filter(e => e.owner == empIdx)
+            .sort((a, b) => {
+                if (a.cat !== b.cat) return a.cat === 'extintor' ? -1 : 1;
+                return parseInt(a.num) - parseInt(b.num);
+            });
+
+        const totalE = misEqs.filter(e => e.cat === 'extintor').length;
+        const totalB = misEqs.filter(e => e.cat === 'botiquin').length;
+
+        const d = new Date(fechaRaw + 'T00:00:00');
+        const fechaF = `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}-${d.getFullYear()}`;
+
+        // ENCABEZADO
+        doc.setFontSize(14); doc.setFont("helvetica", "bold");
+        doc.text("Inspección mensual de extintores y botiquines", 105, 15, {align:'center'});
+        doc.setDrawColor(0, 123, 255); doc.roundedRect(10, 20, 190, 25, 2, 2);
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "bold"); doc.text("EMPRESA: ", 15, 27);
+        doc.setFont("helvetica", "normal"); doc.text(`${empData.nombre} / ${empData.razon}`, 34, 27);
+        doc.setFont("helvetica", "bold"); doc.text("FECHA: ", 15, 36);
+        doc.setFont("helvetica", "normal"); doc.text(`${fechaF}`, 28, 36);
+        doc.setFont("helvetica", "bold"); doc.text("INSPECTOR: ", 65, 36);
+        doc.setFont("helvetica", "normal"); doc.text(`${inspector}`, 85, 36);
+
+        doc.setFont("helvetica", "bold"); doc.text("EQUIPOS:", 155, 30);
+        doc.setTextColor(255, 0, 0); doc.text(`E: ${totalE}`, 155, 38);
+        doc.setTextColor(34, 197, 94); doc.text(`B: ${totalB}`, 175, 38);
+        doc.setTextColor(0, 0, 0); 
+
+        let count = 0;
+        for (const eq of misEqs) {
+            const i = equipos.findIndex(x => x === eq);
+            const asps = eq.cat === 'extintor' ? aspExt : aspBot;
+            const hColor = eq.cat === 'extintor' ? [255, 71, 87] : [46, 213, 115];
+            const rev = revisiones[i] || Array(asps.length).fill("");
+
+            if (count > 0 && count % 6 === 0) {
+                agregarPiePagina(doc, firma);
+                doc.addPage();
+            }
+            let col = count % 2; let row = Math.floor((count % 6) / 2);
+            let posX = (col === 0) ? 10 : 108;
+            let posY = 50 + (row * 72);
+
+            doc.autoTable({
+                startY: posY, margin: { left: posX }, tableWidth: 92,
+                head: [[{content: `${eq.cat.toUpperCase()} #${eq.num} - ${eq.area}`, colSpan: 2}]],
+                body: [...asps.map((a, j) => [a, rev[j]]), ["Obs.", obsRevision[i] || ""]],
+                theme: 'grid',
+                headStyles: { fillColor: hColor, textColor: 255, fontStyle: 'bold' },
+                bodyStyles: { fontSize: 6, cellPadding: 0.7 },
+                columnStyles: { 0: { cellWidth: 72 }, 1: { cellWidth: 20, halign: 'center' } }
+            });
+            count++;
+        }
+
+        agregarPiePagina(doc, firma);
+
+        const conFoto = Object.keys(fotosEvidencia).filter(k => fotosEvidencia[k].length > 0 && equipos[k].owner == empIdx);
+        if(conFoto.length > 0) {
+            doc.addPage(); 
+            doc.setFont("helvetica", "bold"); doc.text("EVIDENCIAS FOTOGRÁFICAS", 105, 15, {align:'center'});
+            let px = 15, py = 25, tImg = 0;
+            const sortedK = conFoto.sort((a, b) => parseInt(equipos[a].num) - parseInt(equipos[b].num));
+            for (const k of sortedK) {
+                for(const f of fotosEvidencia[k]) {
+                    if (tImg > 0 && tImg % 12 === 0) { 
+                        agregarPiePagina(doc, firma);
+                        doc.addPage(); py = 25; px = 15; 
+                    }
+                    doc.setFontSize(7); doc.text(`Eq #${equipos[k].num}`, px, py - 2);
+                    doc.addImage(f, 'JPEG', px, py, 42, 60);
+                    px += 46; if ((tImg + 1) % 4 === 0) { px = 15; py += 75; }
+                    tImg++;
+                }
+            }
+            agregarPiePagina(doc, firma);
+        }
+
+        const nombresMeses = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
+        const mesNombre = nombresMeses[d.getMonth()];
+        const anioNombre = d.getFullYear();
+
+        doc.save(`INSPECIÓN DE EXTINTORES Y BOTIQUINES ${empData.nombre} ${mesNombre} ${anioNombre}.pdf`);
+
+        revisiones = {}; fotosEvidencia = {}; obsRevision = {};
+        document.getElementById('sel-emp-reg').value = "";
+        document.getElementById('ins-nombre').value = "";
+        document.getElementById('ins-fecha').valueAsDate = new Date();
+        limpiarFirma();
+        initRegistro(); 
+        
+        alert("Reporte generado con éxito. La interfaz se ha reiniciado para una nueva inspección.");
+    }
+
+    window.onload = init;
+</script>
+</body>
+</html>
