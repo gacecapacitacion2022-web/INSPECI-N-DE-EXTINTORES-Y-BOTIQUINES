@@ -56,9 +56,9 @@
 <div class="container">
     <div id="tab-registro">
         <div class="form-grid">
-            <div><label><b>Instructor</b></label><input type="text" id="ins-nombre" placeholder="Nombre completo"></div>
-            <div><label><b>Fecha</b></label><input type="date" id="ins-fecha"></div>
-            <div><label><b>Planta</b></label><select id="sel-emp-reg" onchange="initRegistro()"></select></div>
+            <div><label><b>Instructor</b></label><input type="text" id="ins-nombre" placeholder="Nombre completo" oninput="saveDraft()"></div>
+            <div><label><b>Fecha</b></label><input type="date" id="ins-fecha" oninput="saveDraft()"></div>
+            <div><label><b>Planta</b></label><select id="sel-emp-reg" onchange="initRegistro(); saveDraft()"></select></div>
         </div>
 
         <div id="registro-content" class="hidden">
@@ -101,14 +101,14 @@
                 <h3 id="inspecting-title" style="color: var(--p-blue); margin: 0 0 10px 0;"></h3>
                 <div id="ext-info-display" class="info-box"></div>
                 <div id="lista-aspectos"></div>
-                <div style="margin-top:15px;"><label><b>Observaciones:</b></label><textarea id="ins-obs" rows="2"></textarea></div>
+                <div style="margin-top:15px;"><label><b>Observaciones:</b></label><textarea id="ins-obs" rows="2" oninput="saveChecklistProgress()"></textarea></div>
                 <div style="margin-top:15px;">
                     <label><b>Fotos de Evidencia:</b></label>
                     <div id="fotos-dinamicas" style="display:flex; flex-direction:column; gap:8px;">
                         <input type="file" class="ext-foto-input" accept="image/*" capture="environment" onchange="handleMultiplePhotos(this)">
                     </div>
                 </div>
-                <button class="btn btn-main" style="margin-top:20px;" onclick="saveCurrentStatus()">Finalizar Inspección</button>
+                <button class="btn btn-main" style="margin-top:20px;" onclick="closeInspeccionManual()">Cerrar Formulario</button>
             </div>
 
             <div style="margin-top:35px; border-top: 1px solid #eee; padding-top: 20px;">
@@ -144,12 +144,16 @@
 </div>
 
 <script>
-    // --- CONFIGURACIÓN NUBE ---
     const URL_SCRIPT = "https://script.google.com/macros/s/AKfycbzCuposaPKzKukN9R0WN0HYHZIcUPGqSz3M6Zu1Mq43K0GmRPWHwrrNBlwjdAl2gLdTog/exec";
 
     let empresas = JSON.parse(localStorage.getItem('gace_ems')) || [];
     let equipos = JSON.parse(localStorage.getItem('gace_eqs')) || [];
-    let revisiones = {}; let fotosEvidencia = {}; let obsRevision = {};
+    
+    // --- PERSISTENCIA OFFLINE ---
+    let revisiones = JSON.parse(localStorage.getItem('gace_revs')) || {}; 
+    let fotosEvidencia = JSON.parse(localStorage.getItem('gace_fotos')) || {}; 
+    let obsRevision = JSON.parse(localStorage.getItem('gace_obs')) || {};
+
     let currentExtIdx = null; let currentCat = 'extintor';
 
     const aspExt = ["Presión/manómetro", "Cincho de seguridad", "Argolla de seguridad", "Señalamiento visible", "Instructivo de uso", "Manguera en buen estado", "Boquilla libre", "Manija de agarre", "Manija de activación", "Soporte en buen estado", "Ausencia de golpes", "Libre de obstrucción"];
@@ -159,10 +163,48 @@
         renderSelectors(); renderEmpresasTable(); renderEquiposTable();
         document.getElementById('ins-fecha').valueAsDate = new Date();
         setupCanvas('canvas-firma');
-        cargarDatosNube(); // Al iniciar, sincronizamos desde la nube
+        cargarDatosNube();
+        loadDraft();
     }
 
-    // --- FUNCIONES DE COMUNICACIÓN ---
+    // --- NUEVA FUNCIÓN: GUARDADO EN TIEMPO REAL ---
+    function saveChecklistProgress() {
+        if (currentExtIdx === null) return;
+        const asps = equipos[currentExtIdx].cat === 'extintor' ? aspExt : aspBot;
+        
+        // Guardar valores del checklist
+        revisiones[currentExtIdx] = asps.map((_, j) => document.getElementById('asp-' + j).value);
+        // Guardar observaciones
+        obsRevision[currentExtIdx] = document.getElementById('ins-obs').value;
+        
+        localStorage.setItem('gace_revs', JSON.stringify(revisiones));
+        localStorage.setItem('gace_obs', JSON.stringify(obsRevision));
+        
+        // Marcar visualmente la tarjeta si tiene algún dato
+        if (revisiones[currentExtIdx].some(v => v !== "")) {
+            document.getElementById('card-' + currentExtIdx).classList.add('inspected');
+        }
+    }
+
+    function saveDraft() {
+        const draft = {
+            instructor: document.getElementById('ins-nombre').value,
+            fecha: document.getElementById('ins-fecha').value,
+            planta: document.getElementById('sel-emp-reg').value
+        };
+        localStorage.setItem('gace_draft_main', JSON.stringify(draft));
+    }
+
+    function loadDraft() {
+        const draft = JSON.parse(localStorage.getItem('gace_draft_main'));
+        if(draft) {
+            document.getElementById('ins-nombre').value = draft.instructor || "";
+            document.getElementById('ins-fecha').value = draft.fecha || "";
+            document.getElementById('sel-emp-reg').value = draft.planta || "";
+            initRegistro();
+        }
+    }
+
     async function sincronizarNube() {
         const status = document.getElementById('cloud-status');
         status.style.display = 'inline';
@@ -171,18 +213,10 @@
                 method: 'POST',
                 mode: 'no-cors',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'syncAll',
-                    empresas: empresas,
-                    equipos: equipos
-                })
+                body: JSON.stringify({ action: 'syncAll', empresas: empresas, equipos: equipos })
             });
-            console.log("Sincronización enviada con éxito.");
-        } catch (e) {
-            console.error("Error al sincronizar:", e);
-        } finally {
-            setTimeout(() => { status.style.display = 'none'; }, 2000);
-        }
+        } catch (e) { console.error(e); }
+        finally { setTimeout(() => { status.style.display = 'none'; }, 2000); }
     }
 
     async function cargarDatosNube() {
@@ -195,11 +229,9 @@
                 localStorage.setItem('gace_ems', JSON.stringify(empresas));
                 localStorage.setItem('gace_eqs', JSON.stringify(equipos));
                 renderSelectors(); renderEmpresasTable(); renderEquiposTable();
-                console.log("Datos cargados desde la nube.");
+                loadDraft();
             }
-        } catch (e) {
-            console.log("Iniciando con datos locales (sin conexión a nube).");
-        }
+        } catch (e) { console.log("Offline mode"); }
     }
 
     function renderSelectors() {
@@ -234,28 +266,16 @@
     function quickSaveEquipo() {
         const empIdx = document.getElementById('sel-emp-reg').value;
         const cat = document.getElementById('q-cat').value;
-        const editIdx = document.getElementById('edit-eq-idx-reg').value;
-        
         let agente = document.getElementById('q-tipo').value;
         if(agente === 'OTRO') agente = document.getElementById('q-tipo-otro').value;
 
-        const eq = { 
-            cat: cat, owner: empIdx, 
-            num: document.getElementById('q-num').value, area: document.getElementById('q-area').value, 
-            tipo: cat === 'extintor' ? agente : "N/A", 
-            peso: cat === 'extintor' ? document.getElementById('q-peso').value : "N/A"
-        };
-
+        const eq = { cat: cat, owner: empIdx, num: document.getElementById('q-num').value, area: document.getElementById('q-area').value, tipo: cat === 'extintor' ? agente : "N/A", peso: cat === 'extintor' ? document.getElementById('q-peso').value : "N/A" };
         if(!eq.num || !eq.area) return alert("Faltan datos");
 
-        if(editIdx === "") equipos.push(eq);
-        else { equipos[editIdx] = eq; document.getElementById('edit-eq-idx-reg').value = ""; }
-
+        equipos.push(eq);
         localStorage.setItem('gace_eqs', JSON.stringify(equipos));
         ['q-num', 'q-area', 'q-peso', 'q-tipo-otro'].forEach(id => document.getElementById(id).value = "");
-        document.getElementById('q-tipo-otro').classList.add('hidden');
-        loadEquiposForReg(); renderEquiposTable();
-        sincronizarNube(); // <--- SINCRONIZAR
+        loadEquiposForReg(); renderEquiposTable(); sincronizarNube();
     }
 
     function setCategory(cat) {
@@ -278,17 +298,13 @@
         const asps = eq.cat === 'extintor' ? aspExt : aspBot;
         document.getElementById('inspeccion-form').classList.remove('hidden');
         document.getElementById('inspecting-title').innerText = `Revisando #${eq.num}`;
-        
-        document.getElementById('ext-info-display').innerHTML = `
-            <div><b>Área:</b> ${eq.area}</div><div><b>No. Eco:</b> ${eq.num}</div>
-            ${eq.cat === 'extintor' ? `<div><b>Agente:</b> ${eq.tipo}</div><div><b>Peso:</b> ${eq.peso} kg</div>` : ''}
-        `;
+        document.getElementById('ext-info-display').innerHTML = `<div><b>Área:</b> ${eq.area}</div><div><b>No. Eco:</b> ${eq.num}</div>${eq.cat === 'extintor' ? `<div><b>Agente:</b> ${eq.tipo}</div><div><b>Peso:</b> ${eq.peso} kg</div>` : ''}`;
 
         const prev = revisiones[idx] || Array(asps.length).fill("");
         document.getElementById('lista-aspectos').innerHTML = asps.map((a, j) => `
             <div style="display:flex; justify-content:space-between; align-items:center; padding:8px; border-bottom:1px solid #eee;">
                 <span style="font-size:12px;">${a}</span>
-                <select id="asp-${j}" style="width:110px; padding:5px;">
+                <select id="asp-${j}" style="width:110px; padding:5px;" onchange="saveChecklistProgress()">
                     <option value="" ${prev[j]==''?'selected':''}>--</option>
                     <option ${prev[j]=='Cumple'?'selected':''}>Cumple</option>
                     <option ${prev[j]=='No cumple'?'selected':''}>No cumple</option>
@@ -299,20 +315,22 @@
         document.getElementById('fotos-dinamicas').innerHTML = '<input type="file" class="ext-foto-input" accept="image/*" capture="environment" onchange="handleMultiplePhotos(this)">';
     }
 
-    async function saveCurrentStatus() {
-        const asps = equipos[currentExtIdx].cat === 'extintor' ? aspExt : aspBot;
-        revisiones[currentExtIdx] = asps.map((_, j) => document.getElementById('asp-' + j).value);
-        obsRevision[currentExtIdx] = document.getElementById('ins-obs').value;
-        const inputs = document.querySelectorAll('.ext-foto-input');
-        const promesas = [];
-        inputs.forEach(input => { if(input.files[0]) { promesas.push(new Promise(res => { const r = new FileReader(); r.onload = e => res(e.target.result); r.readAsDataURL(input.files[0]); })); } });
-        fotosEvidencia[currentExtIdx] = await Promise.all(promesas);
-        document.getElementById('card-' + currentExtIdx).classList.add('inspected');
+    function closeInspeccionManual() {
         document.getElementById('inspeccion-form').classList.add('hidden');
+        currentExtIdx = null;
     }
 
-    function handleMultiplePhotos(input) {
+    async function handleMultiplePhotos(input) {
         if (input.files && input.files[0]) {
+            // Guardar foto en el array global inmediatamente
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                if(!fotosEvidencia[currentExtIdx]) fotosEvidencia[currentExtIdx] = [];
+                fotosEvidencia[currentExtIdx].push(e.target.result);
+                localStorage.setItem('gace_fotos', JSON.stringify(fotosEvidencia));
+            };
+            reader.readAsDataURL(input.files[0]);
+
             const container = document.getElementById('fotos-dinamicas');
             const nuevoInput = document.createElement('input');
             nuevoInput.type = 'file'; nuevoInput.className = 'ext-foto-input'; nuevoInput.accept = 'image/*';
@@ -323,73 +341,33 @@
     }
 
     function saveEmpresa() {
-        const n = document.getElementById('emp-nom').value, r = document.getElementById('emp-raz').value, idx = document.getElementById('edit-emp-idx').value;
+        const n = document.getElementById('emp-nom').value, r = document.getElementById('emp-raz').value;
         if(!n || !r) return alert("Faltan datos");
-        if(idx === "") empresas.push({nombre:n, razon:r}); else empresas[idx] = {nombre:n, razon:r};
+        empresas.push({nombre:n, razon:r});
         localStorage.setItem('gace_ems', JSON.stringify(empresas));
-        document.getElementById('emp-nom').value = ""; document.getElementById('emp-raz').value = ""; document.getElementById('edit-emp-idx').value = "";
-        renderSelectors(); renderEmpresasTable();
-        sincronizarNube(); // <--- SINCRONIZAR
+        document.getElementById('emp-nom').value = ""; document.getElementById('emp-raz').value = "";
+        renderSelectors(); renderEmpresasTable(); sincronizarNube();
     }
 
     function renderEmpresasTable() {
-        document.querySelector('#table-emp tbody').innerHTML = empresas.map((e, i) => `<tr><td>${e.nombre}</td><td>${e.razon}</td><td><button onclick="editEmp(${i})" class="btn-icon" style="background:var(--p-blue)"><i class="fa-solid fa-pen"></i></button><button onclick="deleteEmp(${i})" class="btn-icon" style="background:var(--danger)"><i class="fa-solid fa-trash"></i></button></td></tr>`).join('');
-    }
-
-    function editEmp(i) { 
-        if(confirm("¿Estás seguro de que deseas editar los datos de esta empresa?")) {
-            document.getElementById('emp-nom').value = empresas[i].nombre; 
-            document.getElementById('emp-raz').value = empresas[i].razon; 
-            document.getElementById('edit-emp-idx').value = i; 
-        }
+        document.querySelector('#table-emp tbody').innerHTML = empresas.map((e, i) => `<tr><td>${e.nombre}</td><td>${e.razon}</td><td><button onclick="deleteEmp(${i})" class="btn-icon" style="background:var(--danger)"><i class="fa-solid fa-trash"></i></button></td></tr>`).join('');
     }
 
     function deleteEmp(i) { 
-        if(confirm("¿Estás totalmente seguro de eliminar esta Planta? Esta acción es irreversible y borrará todos sus equipos automáticamente.")) { 
-            // Filtrar equipos de la empresa eliminada
+        if(confirm("¿Eliminar Planta y sus equipos?")) { 
             equipos = equipos.filter(eq => eq.owner != i);
-            // Ajustar el owner de los equipos restantes si el índice cambió
-            equipos.forEach(eq => { if(eq.owner > i) eq.owner--; });
-            
             empresas.splice(i, 1); 
-            localStorage.setItem('gace_ems', JSON.stringify(empresas)); 
-            localStorage.setItem('gace_eqs', JSON.stringify(equipos));
-            renderSelectors(); renderEmpresasTable(); renderEquiposTable();
-            sincronizarNube(); // <--- SINCRONIZAR
+            localStorage.setItem('gace_ems', JSON.stringify(empresas)); localStorage.setItem('gace_eqs', JSON.stringify(equipos));
+            renderSelectors(); renderEmpresasTable(); renderEquiposTable(); sincronizarNube();
         } 
     }
 
     function renderEquiposTable() {
         const f = document.getElementById('filter-emp-equipos').value;
-        document.querySelector('#table-ext tbody').innerHTML = equipos.map((eq, i) => (f === "all" || eq.owner == f) ? `<tr><td>${eq.cat}</td><td>${eq.num}</td><td>${eq.area}</td><td><button onclick="editEq(${i})" class="btn-icon" style="background:var(--p-blue)"><i class="fa-solid fa-pen"></i></button><button onclick="deleteExt(${i})" class="btn-icon" style="background:var(--danger)"><i class="fa-solid fa-trash"></i></button></td></tr>` : "").join('');
+        document.querySelector('#table-ext tbody').innerHTML = equipos.map((eq, i) => (f === "all" || eq.owner == f) ? `<tr><td>${eq.cat}</td><td>${eq.num}</td><td>${eq.area}</td><td><button onclick="deleteExt(${i})" class="btn-icon" style="background:var(--danger)"><i class="fa-solid fa-trash"></i></button></td></tr>` : "").join('');
     }
 
-    function editEq(i) {
-        if(confirm("¿Deseas editar la información de este equipo?")) {
-            switchTab('tab-registro', 't1');
-            const eq = equipos[i];
-            document.getElementById('sel-emp-reg').value = eq.owner;
-            initRegistro();
-            document.getElementById('edit-eq-idx-reg').value = i;
-            document.getElementById('q-cat').value = eq.cat;
-            toggleQFields();
-            document.getElementById('q-num').value = eq.num;
-            document.getElementById('q-area').value = eq.area;
-            if(eq.cat === 'extintor') {
-                document.getElementById('q-tipo').value = eq.tipo;
-                document.getElementById('q-peso').value = eq.peso;
-            }
-        }
-    }
-
-    function deleteExt(i) { 
-        if(confirm("¿Seguro que deseas eliminar este equipo?")) { 
-            equipos.splice(i, 1); 
-            localStorage.setItem('gace_eqs', JSON.stringify(equipos)); 
-            renderEquiposTable(); 
-            sincronizarNube(); // <--- SINCRONIZAR
-        } 
-    }
+    function deleteExt(i) { if(confirm("¿Eliminar equipo?")) { equipos.splice(i, 1); localStorage.setItem('gace_eqs', JSON.stringify(equipos)); renderEquiposTable(); sincronizarNube(); } }
 
     function setupCanvas(id) {
         const cv = document.getElementById(id); const cx = cv.getContext('2d'); cv.width = 500; cv.height = 150;
@@ -404,15 +382,10 @@
     function limpiarFirma() { document.getElementById('canvas-firma').getContext('2d').clearRect(0,0,500,150); }
 
     function agregarPiePagina(doc, firma) {
-        const pageHeight = doc.internal.pageSize.height;
-        const pageWidth = doc.internal.pageSize.width;
-        doc.setDrawColor(0, 0, 0);
-        doc.setLineWidth(0.5);
-        doc.line(pageWidth/2 - 30, pageHeight - 25, pageWidth/2 + 30, pageHeight - 25);
+        const pageHeight = doc.internal.pageSize.height; const pageWidth = doc.internal.pageSize.width;
+        doc.setDrawColor(0, 0, 0); doc.setLineWidth(0.5); doc.line(pageWidth/2 - 30, pageHeight - 25, pageWidth/2 + 30, pageHeight - 25);
         doc.addImage(firma, 'PNG', pageWidth/2 - 20, pageHeight - 42, 40, 15);
-        doc.setFontSize(9);
-        doc.setFont("helvetica", "bold");
-        doc.text("Firma del inspector", pageWidth/2, pageHeight - 20, {align: 'center'});
+        doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.text("Firma del inspector", pageWidth/2, pageHeight - 20, {align: 'center'});
     }
 
     async function generatePDF() {
@@ -424,35 +397,18 @@
         if(!empIdx || !inspector) return alert("Faltan datos");
 
         const empData = empresas[empIdx];
-        const misEqs = equipos
-            .filter(e => e.owner == empIdx)
-            .sort((a, b) => {
-                if (a.cat !== b.cat) return a.cat === 'extintor' ? -1 : 1;
-                return parseInt(a.num) - parseInt(b.num);
-            });
-
+        const misEqs = equipos.filter(e => e.owner == empIdx).sort((a, b) => (a.cat !== b.cat) ? (a.cat === 'extintor' ? -1 : 1) : parseInt(a.num) - parseInt(b.num));
         const totalE = misEqs.filter(e => e.cat === 'extintor').length;
         const totalB = misEqs.filter(e => e.cat === 'botiquin').length;
-
         const d = new Date(fechaRaw + 'T00:00:00');
         const fechaF = `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}-${d.getFullYear()}`;
 
-        // ENCABEZADO
-        doc.setFontSize(14); doc.setFont("helvetica", "bold");
-        doc.text("Inspección mensual de extintores y botiquines", 105, 15, {align:'center'});
+        doc.setFontSize(14); doc.setFont("helvetica", "bold"); doc.text("Inspección mensual de extintores y botiquines", 105, 15, {align:'center'});
         doc.setDrawColor(0, 123, 255); doc.roundedRect(10, 20, 190, 25, 2, 2);
-        doc.setFontSize(9);
-        doc.setFont("helvetica", "bold"); doc.text("EMPRESA: ", 15, 27);
-        doc.setFont("helvetica", "normal"); doc.text(`${empData.nombre} / ${empData.razon}`, 34, 27);
-        doc.setFont("helvetica", "bold"); doc.text("FECHA: ", 15, 36);
-        doc.setFont("helvetica", "normal"); doc.text(`${fechaF}`, 28, 36);
-        doc.setFont("helvetica", "bold"); doc.text("INSPECTOR: ", 65, 36);
-        doc.setFont("helvetica", "normal"); doc.text(`${inspector}`, 85, 36);
-
-        doc.setFont("helvetica", "bold"); doc.text("EQUIPOS:", 155, 30);
-        doc.setTextColor(255, 0, 0); doc.text(`E: ${totalE}`, 155, 38);
-        doc.setTextColor(34, 197, 94); doc.text(`B: ${totalB}`, 175, 38);
-        doc.setTextColor(0, 0, 0); 
+        doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.text("EMPRESA: ", 15, 27); doc.setFont("helvetica", "normal"); doc.text(`${empData.nombre} / ${empData.razon}`, 34, 27);
+        doc.setFont("helvetica", "bold"); doc.text("FECHA: ", 15, 36); doc.setFont("helvetica", "normal"); doc.text(`${fechaF}`, 28, 36);
+        doc.setFont("helvetica", "bold"); doc.text("INSPECTOR: ", 65, 36); doc.setFont("helvetica", "normal"); doc.text(`${inspector}`, 85, 36);
+        doc.setFont("helvetica", "bold"); doc.text("EQUIPOS:", 155, 30); doc.setTextColor(255, 0, 0); doc.text(`E: ${totalE}`, 155, 38); doc.setTextColor(34, 197, 94); doc.text(`B: ${totalB}`, 175, 38); doc.setTextColor(0, 0, 0); 
 
         let count = 0;
         for (const eq of misEqs) {
@@ -460,43 +416,22 @@
             const asps = eq.cat === 'extintor' ? aspExt : aspBot;
             const hColor = eq.cat === 'extintor' ? [255, 71, 87] : [46, 213, 115];
             const rev = revisiones[i] || Array(asps.length).fill("");
-
-            if (count > 0 && count % 6 === 0) {
-                agregarPiePagina(doc, firma);
-                doc.addPage();
-            }
+            if (count > 0 && count % 6 === 0) { agregarPiePagina(doc, firma); doc.addPage(); }
             let col = count % 2; let row = Math.floor((count % 6) / 2);
-            let posX = (col === 0) ? 10 : 108;
-            let posY = 50 + (row * 72);
-
-            doc.autoTable({
-                startY: posY, margin: { left: posX }, tableWidth: 92,
-                head: [[{content: `${eq.cat.toUpperCase()} #${eq.num} - ${eq.area}`, colSpan: 2}]],
-                body: [...asps.map((a, j) => [a, rev[j]]), ["Obs.", obsRevision[i] || ""]],
-                theme: 'grid',
-                headStyles: { fillColor: hColor, textColor: 255, fontStyle: 'bold' },
-                bodyStyles: { fontSize: 6, cellPadding: 0.7 },
-                columnStyles: { 0: { cellWidth: 72 }, 1: { cellWidth: 20, halign: 'center' } }
-            });
+            let posX = (col === 0) ? 10 : 108; let posY = 50 + (row * 72);
+            doc.autoTable({ startY: posY, margin: { left: posX }, tableWidth: 92, head: [[{content: `${eq.cat.toUpperCase()} #${eq.num} - ${eq.area}`, colSpan: 2}]], body: [...asps.map((a, j) => [a, rev[j]]), ["Obs.", obsRevision[i] || ""]], theme: 'grid', headStyles: { fillColor: hColor, textColor: 255, fontStyle: 'bold' }, bodyStyles: { fontSize: 6, cellPadding: 0.7 }, columnStyles: { 0: { cellWidth: 72 }, 1: { cellWidth: 20, halign: 'center' } } });
             count++;
         }
-
         agregarPiePagina(doc, firma);
 
         const conFoto = Object.keys(fotosEvidencia).filter(k => fotosEvidencia[k].length > 0 && equipos[k].owner == empIdx);
         if(conFoto.length > 0) {
-            doc.addPage(); 
-            doc.setFont("helvetica", "bold"); doc.text("EVIDENCIAS FOTOGRÁFICAS", 105, 15, {align:'center'});
+            doc.addPage(); doc.setFont("helvetica", "bold"); doc.text("EVIDENCIAS FOTOGRÁFICAS", 105, 15, {align:'center'});
             let px = 15, py = 25, tImg = 0;
-            const sortedK = conFoto.sort((a, b) => parseInt(equipos[a].num) - parseInt(equipos[b].num));
-            for (const k of sortedK) {
+            for (const k of conFoto.sort((a,b)=>parseInt(equipos[a].num)-parseInt(equipos[b].num))) {
                 for(const f of fotosEvidencia[k]) {
-                    if (tImg > 0 && tImg % 12 === 0) { 
-                        agregarPiePagina(doc, firma);
-                        doc.addPage(); py = 25; px = 15; 
-                    }
-                    doc.setFontSize(7); doc.text(`Eq #${equipos[k].num}`, px, py - 2);
-                    doc.addImage(f, 'JPEG', px, py, 42, 60);
+                    if (tImg > 0 && tImg % 12 === 0) { agregarPiePagina(doc, firma); doc.addPage(); py = 25; px = 15; }
+                    doc.setFontSize(7); doc.text(`Eq #${equipos[k].num}`, px, py - 2); doc.addImage(f, 'JPEG', px, py, 42, 60);
                     px += 46; if ((tImg + 1) % 4 === 0) { px = 15; py += 75; }
                     tImg++;
                 }
@@ -504,20 +439,14 @@
             agregarPiePagina(doc, firma);
         }
 
-        const nombresMeses = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
-        const mesNombre = nombresMeses[d.getMonth()];
-        const anioNombre = d.getFullYear();
+        doc.save(`INSPECCIÓN ${empData.nombre} ${fechaF}.pdf`);
 
-        doc.save(`INSPECIÓN DE EXTINTORES Y BOTIQUINES ${empData.nombre} ${mesNombre} ${anioNombre}.pdf`);
-
+        // LIMPIEZA TRAS GENERAR PDF
         revisiones = {}; fotosEvidencia = {}; obsRevision = {};
-        document.getElementById('sel-emp-reg').value = "";
-        document.getElementById('ins-nombre').value = "";
-        document.getElementById('ins-fecha').valueAsDate = new Date();
-        limpiarFirma();
-        initRegistro(); 
-        
-        alert("Reporte generado con éxito. La interfaz se ha reiniciado para una nueva inspección.");
+        localStorage.removeItem('gace_revs'); localStorage.removeItem('gace_obs'); localStorage.removeItem('gace_fotos');
+        localStorage.removeItem('gace_draft_main');
+        limpiarFirma(); document.getElementById('sel-emp-reg').value = ""; initRegistro();
+        alert("Reporte generado. Los datos temporales han sido limpiados.");
     }
 
     window.onload = init;
